@@ -7,7 +7,6 @@ const fs = require('fs');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// 启用 CORS
 app.use(cors());
 
 // 静态资源路径
@@ -33,24 +32,22 @@ const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, imageDir),
   filename: (req, file, cb) => {
     const id = req.params.id;
-    const filename = `question_${id}.png`;
+    const timestamp = Date.now();
+    const filename = `question_${id}_${timestamp}.png`;
     cb(null, filename);
   }
 });
 const upload = multer({ storage });
 
-// 处理上传并更新 JSON 映射
+// 上传图片接口
 app.post('/upload/:id', upload.single('file'), (req, res) => {
-  const rawId = req.params.id; // 可能是 5_1699xxx
-  const realId = rawId.split('_')[0]; // 截取题号部分
-  const filename = `question_${rawId}.png`;
+  const rawId = req.params.id;
+  const realId = rawId.split('_')[0];
+  const uploadedFile = req.file;
+  if (!uploadedFile) return res.status(400).json({ error: 'No file uploaded' });
 
-  // 重命名文件（附带时间戳）
-  const oldPath = path.join(imageDir, `question_${rawId}.png`);
-  const newPath = path.join(imageDir, filename);
-  fs.renameSync(oldPath, newPath);
+  const filename = uploadedFile.filename;
 
-  // 更新映射
   imageMap[realId] ||= [];
   if (!imageMap[realId].includes(filename)) {
     imageMap[realId].push(filename);
@@ -58,6 +55,32 @@ app.post('/upload/:id', upload.single('file'), (req, res) => {
   }
 
   res.json({ ok: true, file: `/images/${filename}` });
+});
+
+// 删除图片接口
+app.delete('/delete/:filename', (req, res) => {
+  const filename = req.params.filename;
+  const filepath = path.join(imageDir, filename);
+
+  // 删除文件本体
+  fs.unlink(filepath, err => {
+    if (err) return res.status(404).json({ error: 'File not found' });
+
+    // 更新映射表
+    let updated = false;
+    for (const [key, files] of Object.entries(imageMap)) {
+      const index = files.indexOf(filename);
+      if (index !== -1) {
+        imageMap[key].splice(index, 1);
+        updated = true;
+      }
+    }
+    if (updated) {
+      fs.writeFileSync(mapPath, JSON.stringify(imageMap, null, 2), 'utf-8');
+    }
+
+    res.json({ ok: true });
+  });
 });
 
 // 启动服务器
