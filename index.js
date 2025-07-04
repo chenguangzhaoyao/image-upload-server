@@ -7,45 +7,60 @@ const fs = require('fs');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// 启用 CORS
 app.use(cors());
-app.use('/images', express.static(path.join(__dirname, 'images')));
 
-// 创建图片存储目录
-const uploadDir = path.join(__dirname, 'images');
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
+// 静态资源路径
+const imageDir = path.join(__dirname, 'images');
+app.use('/images', express.static(imageDir));
 
-// 上传处理（根据 ID+时间戳命名）
+// 创建 images 文件夹（如果不存在）
+if (!fs.existsSync(imageDir)) fs.mkdirSync(imageDir);
+
+// 读取或初始化 JSON 映射文件
+const mapPath = path.join(imageDir, 'question_image_map.json');
+let imageMap = {};
+if (fs.existsSync(mapPath)) {
+  try {
+    imageMap = JSON.parse(fs.readFileSync(mapPath, 'utf-8'));
+  } catch {
+    imageMap = {};
+  }
+}
+
+// 上传配置
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, 'images'),
+  destination: (req, file, cb) => cb(null, imageDir),
   filename: (req, file, cb) => {
-    const id = req.params.id; // 允许带时间戳
-    cb(null, `question_${id}.png`);
+    const id = req.params.id;
+    const filename = `question_${id}.png`;
+    cb(null, filename);
   }
 });
 const upload = multer({ storage });
 
+// 处理上传并更新 JSON 映射
 app.post('/upload/:id', upload.single('file'), (req, res) => {
-  res.json({ ok: true, file: `/images/question_${req.params.id}.png` });
-});
+  const rawId = req.params.id; // 可能是 5_1699xxx
+  const realId = rawId.split('_')[0]; // 截取题号部分
+  const filename = `question_${rawId}.png`;
 
-// 删除图片接口
-app.delete('/delete/:filename', (req, res) => {
-  const { filename } = req.params;
-  const filepath = path.join(__dirname, 'images', filename);
-  if (!filename || !filename.endsWith('.png')) {
-    return res.status(400).json({ error: '不合法的文件名' });
+  // 重命名文件（附带时间戳）
+  const oldPath = path.join(imageDir, `question_${rawId}.png`);
+  const newPath = path.join(imageDir, filename);
+  fs.renameSync(oldPath, newPath);
+
+  // 更新映射
+  imageMap[realId] ||= [];
+  if (!imageMap[realId].includes(filename)) {
+    imageMap[realId].push(filename);
+    fs.writeFileSync(mapPath, JSON.stringify(imageMap, null, 2), 'utf-8');
   }
 
-  fs.unlink(filepath, (err) => {
-    if (err) {
-      console.error('删除失败:', err.message);
-      return res.status(404).json({ error: '文件不存在或无法删除' });
-    }
-    console.log(`✅ 已删除 ${filename}`);
-    res.json({ ok: true });
-  });
+  res.json({ ok: true, file: `/images/${filename}` });
 });
 
+// 启动服务器
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`✅ Server running on port ${PORT}`);
 });
