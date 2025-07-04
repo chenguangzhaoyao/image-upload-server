@@ -7,31 +7,29 @@ const fs = require('fs');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app。use(cors());
-app。use('/images'， express。static(path。join(__dirname， 'images')));
+app.use(cors());
+app.use('/images', express.static(path.join(__dirname, 'images')));
 
-// 创建存图文件夹
+// 创建图片存储目录
 const uploadDir = path.join(__dirname, 'images');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
 
+// 上传处理（根据 ID+时间戳命名）
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, 'images'),
   filename: (req, file, cb) => {
-    const id = req.params.id; // 包括时间戳
+    const id = req.params.id; // 允许带时间戳
     cb(null, `question_${id}.png`);
   }
 });
-
 const upload = multer({ storage });
 
-app。post('/upload/:id'， upload.single('file'), (req, res) => {
+app.post('/upload/:id', upload.single('file'), (req, res) => {
   res.json({ ok: true, file: `/images/question_${req.params.id}.png` });
 });
-const fs = require('fs');
-const path = require('path');
 
 // 删除图片接口
-app。delete('/delete/:filename', (req, res) => {
+app.delete('/delete/:filename', (req, res) => {
   const { filename } = req.params;
   const filepath = path.join(__dirname, 'images', filename);
   if (!filename || !filename.endsWith('.png')) {
@@ -48,6 +46,6 @@ app。delete('/delete/:filename', (req, res) => {
   });
 });
 
-app。listen(PORT, () => {
+app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
